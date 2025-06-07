@@ -1,5 +1,7 @@
 // Main application logic for Does Cardi Brenda Party in Dallas
 document.addEventListener('DOMContentLoaded', function() {
+    const isAdmin = window.location.hash === '#admin';
+
     // Get DOM elements
     const answerDisplay = document.getElementById('answerDisplay');
     const toggleBtn = document.getElementById('toggleBtn');
@@ -7,30 +9,35 @@ document.addEventListener('DOMContentLoaded', function() {
     const galleryGrid = document.getElementById('galleryGrid');
     const addPhotoBtn = document.getElementById('addPhotoBtn');
     const photoInput = document.getElementById('photoInput');
-    
+
+    if (!isAdmin) {
+        toggleBtn.style.display = 'none';
+        addPhotoBtn.style.display = 'none';
+    }
+
     // Application state
-    let currentAnswer = 'No'; // Default state as specified
-    
+    let currentAnswer = 'No';
+
     // Initialize the display
-    function initializeDisplay() {
+    async function initializeDisplay() {
+        const response = await fetch('/data');
+        if (response.ok) {
+            const data = await response.json();
+            currentAnswer = data.answer || 'No';
+            renderPhotos(data.photos || []);
+        } else {
+            renderPhotos([]);
+        }
         updateAnswerDisplay();
-        loadPhotos();
     }
     
-    // Update the answer display based on current state
     function updateAnswerDisplay() {
-        // Add loading animation
         answerDisplay.classList.add('loading');
-        
+
         setTimeout(() => {
-            // Update text
             answerText.textContent = currentAnswer;
-            
-            // Update styling classes
             answerDisplay.classList.remove('yes', 'no', 'loading');
             answerDisplay.classList.add(currentAnswer.toLowerCase());
-            
-            // Add a subtle bounce effect
             answerDisplay.style.transform = 'scale(1.1)';
             setTimeout(() => {
                 answerDisplay.style.transform = 'scale(1)';
@@ -39,98 +46,95 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // Toggle between Yes and No
-    function toggleAnswer() {
-        currentAnswer = currentAnswer === 'Yes' ? 'No' : 'Yes';
-        updateAnswerDisplay();
-        
-        // Update button text based on what the next action will be
-        const nextAnswer = currentAnswer === 'Yes' ? 'No' : 'Yes';
-        toggleBtn.textContent = `Switch to ${nextAnswer}`;
-        
-        // Add button press effect
-        toggleBtn.style.transform = 'scale(0.95)';
-        setTimeout(() => {
-            toggleBtn.style.transform = 'scale(1)';
-        }, 100);
-        
-        // Optional: Log the state change for debugging
-        console.log(`Answer changed to: ${currentAnswer}`);
+    async function toggleAnswer() {
+        const resp = await fetch('/toggle', { method: 'POST' });
+        if (resp.ok) {
+            const data = await resp.json();
+            currentAnswer = data.answer;
+            updateAnswerDisplay();
+
+            const nextAnswer = currentAnswer === 'Yes' ? 'No' : 'Yes';
+            toggleBtn.textContent = `Switch to ${nextAnswer}`;
+
+            toggleBtn.style.transform = 'scale(0.95)';
+            setTimeout(() => {
+                toggleBtn.style.transform = 'scale(1)';
+            }, 100);
+        }
     }
     
-    // Photo Gallery Logic
-    function loadPhotos() {
-        const photos = JSON.parse(localStorage.getItem('galleryPhotos')) || [];
-        if (photos.length === 0) {
+    function renderPhotos(photos) {
+        galleryGrid.innerHTML = '';
+        if (!photos || photos.length === 0) {
             galleryGrid.innerHTML = '<p class="no-records-text">No photos yet. Add one!</p>';
+            return;
+        }
+        photos.forEach(photoSrc => {
+            const img = document.createElement('img');
+            img.src = photoSrc;
+            img.classList.add('gallery-photo');
+            galleryGrid.appendChild(img);
+        });
+    }
+
+    async function refreshPhotos() {
+        const resp = await fetch('/data');
+        if (resp.ok) {
+            const data = await resp.json();
+            renderPhotos(data.photos || []);
         } else {
-            photos.forEach(photoSrc => {
-                const img = document.createElement('img');
-                img.src = photoSrc;
-                img.classList.add('gallery-photo');
-                galleryGrid.appendChild(img);
-            });
+            renderPhotos([]);
         }
     }
 
-    function addPhoto(event) {
+    async function addPhoto(event) {
         const files = event.target.files;
-        if (files.length > 0) {
-            const noPhotosMessage = galleryGrid.querySelector('.no-records-text');
-            if (noPhotosMessage) {
-                noPhotosMessage.remove();
-            }
-        }
-        
         for (const file of files) {
             const reader = new FileReader();
-            reader.onload = function(e) {
-                const photos = JSON.parse(localStorage.getItem('galleryPhotos')) || [];
-                photos.push(e.target.result);
-                localStorage.setItem('galleryPhotos', JSON.stringify(photos));
-
-                const img = document.createElement('img');
-                img.src = e.target.result;
-                img.classList.add('gallery-photo');
-                galleryGrid.appendChild(img);
+            reader.onload = async function(e) {
+                await fetch('/photos', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ data: e.target.result })
+                });
+                await refreshPhotos();
             };
             reader.readAsDataURL(file);
         }
     }
 
-    addPhotoBtn.addEventListener('click', () => {
-        photoInput.click();
-    });
+    if (isAdmin) {
+        addPhotoBtn.addEventListener('click', () => {
+            photoInput.click();
+        });
 
-    photoInput.addEventListener('change', addPhoto);
-    
-    // Add event listener to toggle button
-    toggleBtn.addEventListener('click', toggleAnswer);
-    
-    // Add keyboard support for accessibility
-    document.addEventListener('keydown', function(event) {
-        // Toggle on spacebar or Enter key
-        if (event.code === 'Space' || event.code === 'Enter') {
-            if (document.activeElement === toggleBtn) {
-                event.preventDefault();
-                toggleAnswer();
+        photoInput.addEventListener('change', addPhoto);
+
+        toggleBtn.addEventListener('click', toggleAnswer);
+
+        document.addEventListener('keydown', function(event) {
+            if (event.code === 'Space' || event.code === 'Enter') {
+                if (document.activeElement === toggleBtn) {
+                    event.preventDefault();
+                    toggleAnswer();
+                }
             }
-        }
-    });
+        });
+
+        toggleBtn.addEventListener('mouseenter', function() {
+            this.style.transform = 'translateY(-2px)';
+        });
+
+        toggleBtn.addEventListener('mouseleave', function() {
+            this.style.transform = 'translateY(0)';
+        });
+    }
     
-    // Add hover effects for better interactivity
-    toggleBtn.addEventListener('mouseenter', function() {
-        this.style.transform = 'translateY(-2px)';
-    });
-    
-    toggleBtn.addEventListener('mouseleave', function() {
-        this.style.transform = 'translateY(0)';
-    });
-    
-    // Initialize the application
     initializeDisplay();
-    
-    // Set initial button text
-    toggleBtn.textContent = 'Switch to Yes';
+
+    if (isAdmin) {
+        toggleBtn.textContent = 'Switch to Yes';
+    }
     
     // Optional: Add some fun random facts about Dallas (can be removed if not needed)
     const dallasFacts = [
@@ -152,4 +156,5 @@ document.addEventListener('DOMContentLoaded', function() {
         getCurrentAnswer: () => currentAnswer,
         getRandomDallasFact: getRandomDallasFact
     };
-});
+})
+
