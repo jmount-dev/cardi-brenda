@@ -3,6 +3,20 @@ const fs = require('fs');
 const path = require('path');
 
 const PORT = process.env.PORT || 3001;
+const DATA_FILE = path.join(__dirname, 'data.json');
+
+function readData() {
+  try {
+    const raw = fs.readFileSync(DATA_FILE, 'utf8');
+    return JSON.parse(raw);
+  } catch (e) {
+    return { answer: 'No', photos: [] };
+  }
+}
+
+function writeData(data) {
+  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+}
 
 const mimeTypes = {
   '.html': 'text/html',
@@ -16,10 +30,48 @@ const mimeTypes = {
 
 http
   .createServer((req, res) => {
+    // API endpoints
+    if (req.url === '/data' && req.method === 'GET') {
+      const data = readData();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(data));
+      return;
+    }
+
+    if (req.url === '/toggle' && req.method === 'POST') {
+      const data = readData();
+      data.answer = data.answer === 'Yes' ? 'No' : 'Yes';
+      writeData(data);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ answer: data.answer }));
+      return;
+    }
+
+    if (req.url === '/photos' && req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => (body += chunk));
+      req.on('end', () => {
+        try {
+          const { data: img } = JSON.parse(body);
+          if (img) {
+            const dataObj = readData();
+            dataObj.photos.push(img);
+            writeData(dataObj);
+          }
+        } catch (e) {
+          // ignore parse errors
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'ok' }));
+      });
+      return;
+    }
+
     let filePath = '.' + req.url;
     if (filePath === './') {
       filePath = './index.html';
     }
+
     const ext = path.extname(filePath);
     const contentType = mimeTypes[ext] || 'application/octet-stream';
 
