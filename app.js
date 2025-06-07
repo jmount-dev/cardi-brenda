@@ -4,6 +4,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const answerDisplay = document.getElementById('answerDisplay');
     const toggleBtn = document.getElementById('toggleBtn');
     const answerText = answerDisplay.querySelector('.answer-text');
+    const galleryGrid = document.getElementById('galleryGrid');
+    const addPhotoBtn = document.getElementById('addPhotoBtn');
+    const photoInput = document.getElementById('photoInput');
     
     // Application state
     let currentAnswer = 'No'; // Default state as specified
@@ -11,6 +14,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize the display
     function initializeDisplay() {
         updateAnswerDisplay();
+        loadPhotos();
     }
     
     // Update the answer display based on current state
@@ -52,6 +56,52 @@ document.addEventListener('DOMContentLoaded', function() {
         // Optional: Log the state change for debugging
         console.log(`Answer changed to: ${currentAnswer}`);
     }
+    
+    // Photo Gallery Logic
+    function loadPhotos() {
+        const photos = JSON.parse(localStorage.getItem('galleryPhotos')) || [];
+        if (photos.length === 0) {
+            galleryGrid.innerHTML = '<p class="no-records-text">No photos yet. Add one!</p>';
+        } else {
+            photos.forEach(photoSrc => {
+                const img = document.createElement('img');
+                img.src = photoSrc;
+                img.classList.add('gallery-photo');
+                galleryGrid.appendChild(img);
+            });
+        }
+    }
+
+    function addPhoto(event) {
+        const files = event.target.files;
+        if (files.length > 0) {
+            const noPhotosMessage = galleryGrid.querySelector('.no-records-text');
+            if (noPhotosMessage) {
+                noPhotosMessage.remove();
+            }
+        }
+        
+        for (const file of files) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const photos = JSON.parse(localStorage.getItem('galleryPhotos')) || [];
+                photos.push(e.target.result);
+                localStorage.setItem('galleryPhotos', JSON.stringify(photos));
+
+                const img = document.createElement('img');
+                img.src = e.target.result;
+                img.classList.add('gallery-photo');
+                galleryGrid.appendChild(img);
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+
+    addPhotoBtn.addEventListener('click', () => {
+        photoInput.click();
+    });
+
+    photoInput.addEventListener('change', addPhoto);
     
     // Add event listener to toggle button
     toggleBtn.addEventListener('click', toggleAnswer);
