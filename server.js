@@ -10,7 +10,7 @@ function readData() {
     const raw = fs.readFileSync(DATA_FILE, 'utf8');
     return JSON.parse(raw);
   } catch (e) {
-    return { answer: 'No', photos: [] };
+    return { photos: [] };
   }
 }
 
@@ -38,14 +38,6 @@ http
       return;
     }
 
-    if (req.url === '/toggle' && req.method === 'POST') {
-      const data = readData();
-      data.answer = data.answer === 'Yes' ? 'No' : 'Yes';
-      writeData(data);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ answer: data.answer }));
-      return;
-    }
 
     if (req.url === '/photos' && req.method === 'POST') {
       let body = '';
@@ -55,7 +47,7 @@ http
           const { data: img } = JSON.parse(body);
           if (img) {
             const dataObj = readData();
-            dataObj.photos.push(img);
+            dataObj.photos.push({ src: img, timestamp: Date.now() });
             writeData(dataObj);
           }
         } catch (e) {
