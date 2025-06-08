@@ -1,160 +1,116 @@
 // Main application logic for Does Cardi Brenda Party in Dallas
-document.addEventListener('DOMContentLoaded', function() {
-    const isAdmin = window.location.hash === '#admin';
+document.addEventListener('DOMContentLoaded', function () {
+  const isAdmin = window.location.hash === '#admin';
 
-    // Get DOM elements
-    const answerDisplay = document.getElementById('answerDisplay');
-    const toggleBtn = document.getElementById('toggleBtn');
-    const answerText = answerDisplay.querySelector('.answer-text');
-    const galleryGrid = document.getElementById('galleryGrid');
-    const addPhotoBtn = document.getElementById('addPhotoBtn');
-    const photoInput = document.getElementById('photoInput');
+  const galleryGrid = document.getElementById('galleryGrid');
+  const addPhotoBtn = document.getElementById('addPhotoBtn');
+  const photoInput = document.getElementById('photoInput');
+  const lastSeenText = document.getElementById('lastSeenText');
 
-    if (!isAdmin) {
-        toggleBtn.style.display = 'none';
-        addPhotoBtn.style.display = 'none';
+  if (!isAdmin) {
+    addPhotoBtn.style.display = 'none';
+  }
+
+  async function initializeDisplay() {
+    const response = await fetch('/data');
+    if (response.ok) {
+      const data = await response.json();
+      renderPhotos(data.photos || []);
+      updateLastSeen(data.photos || []);
+    } else {
+      renderPhotos([]);
+      updateLastSeen([]);
     }
+  }
 
-    // Application state
-    let currentAnswer = 'No';
+  function formatRelative(date) {
+    const diff = Date.now() - date.getTime();
+    const sec = Math.floor(diff / 1000);
+    const min = Math.floor(sec / 60);
+    const hr = Math.floor(min / 60);
+    const day = Math.floor(hr / 24);
+    if (day > 0) return `${day} day${day > 1 ? 's' : ''} ago`;
+    if (hr > 0) return `${hr} hour${hr > 1 ? 's' : ''} ago`;
+    if (min > 0) return `${min} minute${min > 1 ? 's' : ''} ago`;
+    return 'just now';
+  }
 
-    // Initialize the display
-    async function initializeDisplay() {
-        const response = await fetch('/data');
-        if (response.ok) {
-            const data = await response.json();
-            currentAnswer = data.answer || 'No';
-            renderPhotos(data.photos || []);
-        } else {
-            renderPhotos([]);
-        }
-        updateAnswerDisplay();
+  function updateLastSeen(photos) {
+    if (!photos || photos.length === 0) {
+      lastSeenText.textContent = 'Never';
+      return;
     }
-    
-    function updateAnswerDisplay() {
-        answerDisplay.classList.add('loading');
+    const last = photos[photos.length - 1];
+    const date = new Date(last.timestamp);
+    lastSeenText.textContent = `Last seen partying ${formatRelative(date)}`;
+  }
 
-        setTimeout(() => {
-            answerText.textContent = currentAnswer;
-            answerDisplay.classList.remove('yes', 'no', 'loading');
-            answerDisplay.classList.add(currentAnswer.toLowerCase());
-            answerDisplay.style.transform = 'scale(1.1)';
-            setTimeout(() => {
-                answerDisplay.style.transform = 'scale(1)';
-            }, 150);
-        }, 300);
+  function renderPhotos(photos) {
+    galleryGrid.innerHTML = '';
+    if (!photos || photos.length === 0) {
+      galleryGrid.innerHTML = '<p class="no-records-text">No photos yet. Add one!</p>';
+      return;
     }
-    
-    // Toggle between Yes and No
-    async function toggleAnswer() {
-        const resp = await fetch('/toggle', { method: 'POST' });
-        if (resp.ok) {
-            const data = await resp.json();
-            currentAnswer = data.answer;
-            updateAnswerDisplay();
+    photos.forEach(photo => {
+      const img = document.createElement('img');
+      img.src = photo.src;
+      img.classList.add('gallery-photo');
+      galleryGrid.appendChild(img);
+    });
+  }
 
-            const nextAnswer = currentAnswer === 'Yes' ? 'No' : 'Yes';
-            toggleBtn.textContent = `Switch to ${nextAnswer}`;
-
-            toggleBtn.style.transform = 'scale(0.95)';
-            setTimeout(() => {
-                toggleBtn.style.transform = 'scale(1)';
-            }, 100);
-        }
+  async function refreshPhotos() {
+    const resp = await fetch('/data');
+    if (resp.ok) {
+      const data = await resp.json();
+      renderPhotos(data.photos || []);
+      updateLastSeen(data.photos || []);
+    } else {
+      renderPhotos([]);
+      updateLastSeen([]);
     }
-    
-    function renderPhotos(photos) {
-        galleryGrid.innerHTML = '';
-        if (!photos || photos.length === 0) {
-            galleryGrid.innerHTML = '<p class="no-records-text">No photos yet. Add one!</p>';
-            return;
-        }
-        photos.forEach(photoSrc => {
-            const img = document.createElement('img');
-            img.src = photoSrc;
-            img.classList.add('gallery-photo');
-            galleryGrid.appendChild(img);
+  }
+
+  async function addPhoto(event) {
+    const files = event.target.files;
+    for (const file of files) {
+      const reader = new FileReader();
+      reader.onload = async function (e) {
+        await fetch('/photos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: e.target.result })
         });
+        await refreshPhotos();
+      };
+      reader.readAsDataURL(file);
     }
+  }
 
-    async function refreshPhotos() {
-        const resp = await fetch('/data');
-        if (resp.ok) {
-            const data = await resp.json();
-            renderPhotos(data.photos || []);
-        } else {
-            renderPhotos([]);
-        }
-    }
+  if (isAdmin) {
+    addPhotoBtn.addEventListener('click', () => {
+      photoInput.click();
+    });
 
-    async function addPhoto(event) {
-        const files = event.target.files;
-        for (const file of files) {
-            const reader = new FileReader();
-            reader.onload = async function(e) {
-                await fetch('/photos', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ data: e.target.result })
-                });
-                await refreshPhotos();
-            };
-            reader.readAsDataURL(file);
-        }
-    }
+    photoInput.addEventListener('change', addPhoto);
+  }
 
-    if (isAdmin) {
-        addPhotoBtn.addEventListener('click', () => {
-            photoInput.click();
-        });
+  initializeDisplay();
 
-        photoInput.addEventListener('change', addPhoto);
+  // Optional: Add some fun random facts about Dallas (can be removed if not needed)
+  const dallasFacts = [
+    'Dallas is home to the largest arts district in the United States!',
+    'The frozen margarita machine was invented in Dallas in 1971!',
+    'Dallas has more shopping centers per capita than any other US city!',
+    "The Dallas Cowboys are known as 'America's Team'!",
+    'Dallas is the birthplace of the integrated circuit!'
+  ];
 
-        toggleBtn.addEventListener('click', toggleAnswer);
+  function getRandomDallasFact() {
+    return dallasFacts[Math.floor(Math.random() * dallasFacts.length)];
+  }
 
-        document.addEventListener('keydown', function(event) {
-            if (event.code === 'Space' || event.code === 'Enter') {
-                if (document.activeElement === toggleBtn) {
-                    event.preventDefault();
-                    toggleAnswer();
-                }
-            }
-        });
-
-        toggleBtn.addEventListener('mouseenter', function() {
-            this.style.transform = 'translateY(-2px)';
-        });
-
-        toggleBtn.addEventListener('mouseleave', function() {
-            this.style.transform = 'translateY(0)';
-        });
-    }
-    
-    initializeDisplay();
-
-    if (isAdmin) {
-        toggleBtn.textContent = 'Switch to Yes';
-    }
-    
-    // Optional: Add some fun random facts about Dallas (can be removed if not needed)
-    const dallasFacts = [
-        "Dallas is home to the largest arts district in the United States!",
-        "The frozen margarita machine was invented in Dallas in 1971!",
-        "Dallas has more shopping centers per capita than any other US city!",
-        "The Dallas Cowboys are known as 'America's Team'!",
-        "Dallas is the birthplace of the integrated circuit!"
-    ];
-    
-    // Function to add a random Dallas fact (for future enhancement)
-    function getRandomDallasFact() {
-        return dallasFacts[Math.floor(Math.random() * dallasFacts.length)];
-    }
-    
-    // Expose some functions globally for potential future use
-    window.CardiBrendaApp = {
-        toggleAnswer: toggleAnswer,
-        getCurrentAnswer: () => currentAnswer,
-        getRandomDallasFact: getRandomDallasFact
-    };
-})
-
+  window.CardiBrendaApp = {
+    getRandomDallasFact: getRandomDallasFact
+  };
+});
